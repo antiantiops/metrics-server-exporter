@@ -79,5 +79,5 @@ Maybe your Promethues will be automatic to get metrics and you don't need to con
 
 ```plaintext
 helm package ./helm-chart/metrics-server-exporter --destination ./helm-chart/
-helm repo index . --url  https://mrnim94.github.io/metrics-server-exporter
+helm repo index . --url  https://antiantiops.github.io/metrics-server-exporter
 ```
