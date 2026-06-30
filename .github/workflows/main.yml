@@ -5,6 +5,9 @@ on:
       - "master"
     tags:
       - '*.*.*'
+permissions:
+  contents: write
+
 jobs:
   CI:
     runs-on: ubuntu-latest
@@ -12,6 +15,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
       - name: Run TruffleHog
         run: |
           docker pull dxa4481/trufflehog
@@ -61,3 +67,43 @@ jobs:
 #        uses: dominikh/staticcheck-action@v1.3.0
 #        with:
 #          version: "2023.1.6"
+
+      # ── Helm Chart Release (only on tag push) ──
+      - name: Update Helm chart version
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          TAG="${{ env.RELEASE_VERSION }}"
+          CHART_DIR="helm-chart/metrics-server-exporter"
+
+          # Update Chart.yaml version and appVersion with the tag
+          sed -i "s/^version: .*/version: ${TAG}/" "${CHART_DIR}/Chart.yaml"
+          sed -i "s/^appVersion: .*/appVersion: \"v${TAG}\"/" "${CHART_DIR}/Chart.yaml"
+
+          echo "Updated Chart.yaml:"
+          cat "${CHART_DIR}/Chart.yaml"
+
+      - name: Install Helm
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.17.3
+
+      - name: Package Helm chart
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          helm package helm-chart/metrics-server-exporter -d helm-chart/
+
+      - name: Update Helm repo index
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          helm repo index --url https://antiantiops.github.io/metrics-server-exporter/helm-chart/ --merge index.yaml helm-chart/
+          mv helm-chart/index.yaml index.yaml
+
+      - name: Commit and push Helm chart changes
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add helm-chart/ index.yaml
+          git commit -m "chore: release helm chart v${{ env.RELEASE_VERSION }}"
+          git push origin HEAD:master
